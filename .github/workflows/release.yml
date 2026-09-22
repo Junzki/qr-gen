@@ -39,7 +39,7 @@ jobs:
           git add pyproject.toml
           git commit -m "chore: bump version to ${{ steps.resolve.outputs.version }}" || echo "No changes to commit"
           git push origin HEAD:master
-          git tag "${{ steps.resolve.outputs.tag }}"
+          git tag "${{ steps.resolve.outputs.tag }}" || echo "Tag already exists"
           git push origin "${{ steps.resolve.outputs.tag }}"
 
   build:
@@ -102,10 +102,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          # This job does not check out the repo. gh otherwise shells out to
+          # git to discover the repository and fails with "not a git repository".
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
             echo "Release $TAG already exists; deleting it to replace assets"
-            gh release delete "$TAG" --yes
+            gh release delete "$TAG" --repo "$REPO" --yes
           fi
-          gh release create "$TAG" artifacts/* --title "$TAG" --generate-notes
+          gh release create "$TAG" artifacts/* \
+            --repo "$REPO" \
+            --title "$TAG" \
+            --generate-notes \
+            --verify-tag
